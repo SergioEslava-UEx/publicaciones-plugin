@@ -1,0 +1,15 @@
+# Ignorar archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Ignorar dependencias de node/npm si las hay
+node_modules/
+
+# Ignorar archivos generados
+*.log
+*.zip
+*.tmp
+
+# Ignorar archivos de WordPress que no sean tu plugin
+wp-config.php
+.htaccess
