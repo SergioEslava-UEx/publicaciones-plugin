@@ -50,13 +50,13 @@ wp-content/uploads/publicaciones/{AÑO}/
 
 El plugin incorpora un método para importar publicaciones desde una estructura de carpetas con el formato:
 
-/origen/
-├─ 2021/
-│ ├─ archivo1.pdf
-│ └─ archivo1.bib
-├─ 2022/
-├─ archivo2.pdf
-└─ archivo2.bib
+    /origen/
+    ├─ 2021/
+    │ ├─ archivo1.pdf
+    │ └─ archivo1.bib
+    ├─ 2022/
+    ├─ archivo2.pdf
+    └─ archivo2.bib
 
 Para cada año, los ficheros PDF y BibTeX se copian a `uploads/publicaciones/{AÑO}/` y se genera la entrada correspondiente en la base de datos. Esta funcionalidad es útil para cargas iniciales o migraciones desde herramientas previas.
 
