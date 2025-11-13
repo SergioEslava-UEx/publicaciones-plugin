@@ -1,20 +1,40 @@
 <?php
 if ( !defined('ABSPATH') ) exit;
-
+/**
+ * Interfaz de administración del plugin "Publicaciones Científicas".
+ * - Añade la opción de menú en el panel de WordPress.
+ * - Pinta el listado (WP_List_Table), filtros y formularios.
+ * - Procesa acciones del usuario (crear, editar, eliminar, importación).
+ * - Valida nonces (CSRF) y sanea entradas.
+ *
+ * No crea páginas públicas ni shortcodes; todo ocurre dentro del área de administración.
+ */
 class Publicaciones_Admin {
-
+    /**
+     * Registra el elemento de menú y la página del plugin en el administrador.
+     *
+     * Se ejecuta durante la construcción del menú del panel de WordPress
+     * para añadir "Publicaciones" en el lateral.
+     */
     public function add_admin_menu() {
         add_menu_page(
-            'Publicaciones',
-            'Publicaciones',
-            'manage_options',
-            'publicaciones',
-            [$this, 'render_admin_page'],
-            'dashicons-media-document',
-            20
+            'Publicaciones', // Título de la página
+            'Publicaciones', // Texto del menú
+            'manage_options', // Capacidad mínima requerida
+            'publicaciones', // Slug
+            [$this, 'render_admin_page'], // Callback que pinta la pantalla
+            'dashicons-media-document', //Icono
+            20 //Posicion
         );
     }
 
+    /**
+     * Renderiza la pantalla principal del plugin en el administrador.
+     *
+     * Flujo general:
+     *  - Si llega una acción por POST (crear/editar/eliminar/importar), primero se valida el nonce (CSRF).
+     *  - Después se muestran filtros/búsqueda, listado paginado y el formulario de alta/edición.
+     */
     public function render_admin_page() {
         echo '<div class="wrap"><h1>📚 Publicaciones Científicas</h1>';
 
@@ -83,6 +103,7 @@ class Publicaciones_Admin {
     }
 
 
+    // Muestra el formulario de alta/edición de publicaciones
     private function mostrar_formulario() {
         ?>
         <form method="post" enctype="multipart/form-data" style="max-width:600px;">
@@ -115,6 +136,13 @@ class Publicaciones_Admin {
         <?php
     }
 
+    /**
+     * Guarda una publicación y gestiona las subidas de PDF/BIB.
+     *
+     * - Valida/sanea los campos.
+     * - Si hay archivos, los mueve a /wp-content/uploads/publicaciones/{AÑO}/ y construye las URLs.
+     * - Inserta (o actualiza) la fila en la base de datos.
+     */
     private function guardar_publicacion() {
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
@@ -165,6 +193,14 @@ class Publicaciones_Admin {
         echo '<div class="notice notice-success"><p>✅ Publicación guardada correctamente.</p></div>';
     }
 
+    /**
+     * Lista las publicaciones con búsqueda, filtro por año y paginación.
+     *
+     * - Búsqueda: en título y autores (LIKE).
+     * - Filtro: por año exacto.
+     * - Orden: fecha_creacion DESC.
+     * - Paginación: LIMIT + OFFSET.
+     */
     private function mostrar_listado($busqueda = '', $filtro_anyo = '', $pagina_actual = 1, $items_por_pagina = 20){
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
@@ -194,6 +230,7 @@ class Publicaciones_Admin {
         $offset = ($pagina_actual - 1) * $items_por_pagina;
         $sql .= " LIMIT $offset, $items_por_pagina";
 
+        // Importante: preparar SOLO si hay %s/%d en $sql.
         $publicaciones = $wpdb->get_results($wpdb->prepare($sql, ...$params));
 
         if ( empty($publicaciones) ) {
@@ -226,6 +263,7 @@ class Publicaciones_Admin {
             echo '<td>'.esc_html($pub->fecha_creacion).'</td>';
             echo '</tr>';
 
+            // Enlaces de acción (edición/eliminación)
             $edit_link = admin_url('admin.php?page=publicaciones&editar_id=' . $pub->id);
             $delete_link = admin_url('admin.php?page=publicaciones&borrar_id=' . $pub->id);
 
@@ -237,6 +275,7 @@ class Publicaciones_Admin {
 
         echo '</tbody></table>';
 
+        // Paginación (conteo total)
         $total_resultados = $wpdb->get_var($wpdb->prepare(
             "SELECT COUNT(*) FROM $table" . ($where ? " WHERE " . implode(" AND ", $where) : ""), ...$params
         ));
@@ -253,6 +292,7 @@ class Publicaciones_Admin {
         }
     }
 
+    // Elimina todas las publicaciones de la tabla
     private function vaciar_publicaciones() {
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
@@ -263,6 +303,7 @@ class Publicaciones_Admin {
         echo '<div class="notice notice-warning"><p>✅ Todas las publicaciones han sido eliminadas de la base de datos.</p></div>';
     }
 
+    // Elimina una publicación concreta y borra sus archivos asociados
     private function borrar_publicacion($id) {
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
@@ -285,6 +326,7 @@ class Publicaciones_Admin {
         echo '<div class="notice notice-success"><p>✅ Publicación eliminada correctamente.</p></div>';
     }
 
+    // Muestra el formulario de edición de una publicación
     private function editar_publicacion_form($id) {
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
@@ -333,6 +375,7 @@ class Publicaciones_Admin {
         <?php
     }
 
+    // Guarda los cambios de una publicación (texto + reemplazo de ficheros si se suben).
     private function guardar_edicion($id) {
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
@@ -376,6 +419,7 @@ class Publicaciones_Admin {
         echo '<div class="notice notice-success"><p>✅ Publicación actualizada correctamente.</p></div>';
     }
 
+    // Importación masiva de publicaciones desde una ruta base con subcarpetas por año.
     public function volcar_publicaciones($ruta_origen) {
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
