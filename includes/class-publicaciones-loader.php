@@ -20,7 +20,7 @@ class Publicaciones_Loader {
     // Construye el cargador e instancia los componentes principales
     public function __construct() {
         $this->db = new Publicaciones_DB();
-        $this->admin = new Publicaciones_Admin();
+        $this->admin = new Publicaciones_Admin($this->db);
     }
 
     public function run() {

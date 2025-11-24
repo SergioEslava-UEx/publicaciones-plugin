@@ -10,6 +10,11 @@ if ( !defined('ABSPATH') ) exit;
  * No crea páginas públicas ni shortcodes; todo ocurre dentro del área de administración.
  */
 class Publicaciones_Admin {
+
+    public function __construct($db) {
+        $this->db = $db;
+    }
+
     /**
      * Registra el elemento de menú y la página del plugin en el administrador.
      *
@@ -61,6 +66,14 @@ class Publicaciones_Admin {
             $this->volcar_publicaciones(trim($_POST['ruta_volcado']));
         }
 
+        // Resetear completamente el sistema
+        if ( isset($_POST['pub_reset']) &&
+            isset($_POST['pub_reset_nonce_field']) &&
+            wp_verify_nonce($_POST['pub_reset_nonce_field'], 'pub_reset_nonce') ) {
+
+            $this->resetear_plugin();
+        }
+
         // Búsqueda
         $busqueda = isset($_GET['pub_buscar']) ? sanitize_text_field($_GET['pub_buscar']) : '';
 
@@ -99,7 +112,26 @@ class Publicaciones_Admin {
         echo '<input type="submit" name="pub_volcar" class="button button-primary" value="Volcar publicaciones">';
         echo '</form>';
 
+        echo '<h2>🧨 Resetear completamente el plugin</h2>';
+        echo '<p style="color:red;font-weight:bold;">¡Esto borrará la tabla y la recreará desde cero! Úsalo solo si sabes lo que haces.</p>';
+        echo '<form method="post" onsubmit="return confirm(\'⚠️ Esto borrará toda la información y recreará la base de datos.\n\n¿Seguro que quieres continuar?\');">';
+        wp_nonce_field('pub_reset_nonce', 'pub_reset_nonce_field');
+        echo '<input type="submit" name="pub_reset" class="button button-primary" value="Resetear plugin por completo">';
+        echo '</form>';
+
         echo '</div>';
+    }
+
+    private function resetear_plugin() {
+        global $wpdb;
+
+        // Borrar tabla
+        $wpdb->query("DROP TABLE IF EXISTS {$this->table_name}");
+
+        // Recrear tabla
+        $this->db->create_table();
+
+        echo '<div class="updated"><p>✔️ La base de datos ha sido reseteada y recreada correctamente.</p></div>';
     }
 
 
@@ -247,6 +279,7 @@ class Publicaciones_Admin {
         echo '<th>PDF</th>';
         echo '<th>BibTeX</th>';
         echo '<th>Fecha</th>';
+        echo '<th>Revista</th>';
         echo '</tr></thead><tbody>';
 
         foreach ( $publicaciones as $pub ) {
@@ -261,6 +294,7 @@ class Publicaciones_Admin {
             echo '<td>'.$pdf_link.'</td>';
             echo '<td>'.$bib_link.'</td>';
             echo '<td>'.esc_html($pub->fecha_creacion).'</td>';
+            echo '<td>'.esc_html($pub->tipo_publicacion).'</td>';
             echo '</tr>';
 
             // Enlaces de acción (edición/eliminación)
@@ -367,6 +401,10 @@ class Publicaciones_Admin {
                     <th><label for="bib">Archivo BibTeX (.bib, opcional)</label></th>
                     <td><input type="file" name="bib" id="bib" accept=".bib"></td>
                 </tr>
+                <tr>
+                    <th><label for="tipo_publicacion">Revista (opcional)</label></th>
+                    <td><textarea name="tipo_publicacion" id="tipo_publicacion" rows="3" class="large-text"><?php echo esc_textarea($pub->tipo_publicacion); ?></textarea></td>
+                </tr>
             </table>
             <p class="submit">
                 <input type="submit" name="pub_editar_guardar" class="button button-primary" value="Guardar cambios">
@@ -384,6 +422,7 @@ class Publicaciones_Admin {
             'titulo' => sanitize_text_field($_POST['titulo']),
             'autores' => sanitize_textarea_field($_POST['autores']),
             'anio' => intval($_POST['anio']),
+            'tipo_publicacion' => sanitize_textarea_field($_POST['tipo_publicacion']),
         ];
 
         $pub = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id=%d", $id));

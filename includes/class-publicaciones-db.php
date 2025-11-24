@@ -40,6 +40,7 @@ class Publicaciones_DB {
             titulo varchar(255) NOT NULL,
             autores text,
             anio year,
+            tipo_publicacion varchar(50) DEFAULT NULL,
             pdf_path varchar(255),
             bib_path varchar(255),
             fecha_creacion datetime DEFAULT CURRENT_TIMESTAMP,
