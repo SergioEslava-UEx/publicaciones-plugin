@@ -43,6 +43,7 @@ class Publicaciones_DB {
             tipo_publicacion varchar(50) DEFAULT NULL,
             pdf_path varchar(255),
             bib_path varchar(255),
+            revista varchar(255) DEFAULT NULL,
             fecha_creacion datetime DEFAULT CURRENT_TIMESTAMP,
             ultima_modificacion datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY  (id)

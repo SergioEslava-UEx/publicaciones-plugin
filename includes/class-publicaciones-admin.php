@@ -125,8 +125,10 @@ class Publicaciones_Admin {
     private function resetear_plugin() {
         global $wpdb;
 
+        $table = $wpdb->prefix . 'publicaciones';
+
         // Borrar tabla
-        $wpdb->query("DROP TABLE IF EXISTS {$this->table_name}");
+        $wpdb->query("DROP TABLE IF EXISTS `$table`");
 
         // Recrear tabla
         $this->db->create_table();
@@ -160,6 +162,14 @@ class Publicaciones_Admin {
                     <th><label for="bib">Archivo BibTeX (.bib)</label></th>
                     <td><input type="file" name="bib" id="bib" accept=".bib" required></td>
                 </tr>
+                <tr>
+                    <th><label for="revista">Revista</label></th>
+                    <td>
+                        <input type="text" name="revista" id="revista" class="regular-text"
+                            value="<?php echo isset($publicacion->revista) ? esc_attr($publicacion->revista) : ''; ?>">
+                    </td>
+                </tr>
+
             </table>
             <p class="submit">
                 <input type="submit" name="pub_guardar" class="button button-primary" value="Guardar Publicación">
@@ -218,7 +228,8 @@ class Publicaciones_Admin {
                 'autores' => sanitize_textarea_field($_POST['autores']),
                 'anio' => intval($_POST['anio']),
                 'pdf_path' => $pdf_path,
-                'bib_path' => $bib_path
+                'bib_path' => $bib_path,
+                'revista' => isset($_POST['revista']) ? sanitize_text_field($_POST['revista']) : null
             ]
         );
 
@@ -280,6 +291,7 @@ class Publicaciones_Admin {
         echo '<th>BibTeX</th>';
         echo '<th>Fecha</th>';
         echo '<th>Revista</th>';
+        echo '<th>Acciones</th>';
         echo '</tr></thead><tbody>';
 
         foreach ( $publicaciones as $pub ) {
@@ -294,17 +306,18 @@ class Publicaciones_Admin {
             echo '<td>'.$pdf_link.'</td>';
             echo '<td>'.$bib_link.'</td>';
             echo '<td>'.esc_html($pub->fecha_creacion).'</td>';
+            echo '<td>'.esc_html($pub->revista).'</td>';
             echo '<td>'.esc_html($pub->tipo_publicacion).'</td>';
-            echo '</tr>';
 
             // Enlaces de acción (edición/eliminación)
             $edit_link = admin_url('admin.php?page=publicaciones&editar_id=' . $pub->id);
             $delete_link = admin_url('admin.php?page=publicaciones&borrar_id=' . $pub->id);
 
             echo '<td>';
-            echo '<a href="'.esc_url($edit_link).'" class="button button-small">Editar</a> ';
-            echo '<a href="'.esc_url($delete_link).'" class="button button-small" onclick="return confirm(\'¿Seguro que quieres eliminar esta publicación?\');">Eliminar</a>';
+                echo '<a href="'.esc_url($edit_link).'" class="button button-small">Editar</a> ';
+                echo '<a href="'.esc_url($delete_link).'" class="button button-small" onclick="return confirm(\'¿Seguro que quieres eliminar esta publicación?\');">Eliminar</a>';
             echo '</td>';
+            echo '</tr>';
         }
 
         echo '</tbody></table>';
@@ -402,8 +415,8 @@ class Publicaciones_Admin {
                     <td><input type="file" name="bib" id="bib" accept=".bib"></td>
                 </tr>
                 <tr>
-                    <th><label for="tipo_publicacion">Revista (opcional)</label></th>
-                    <td><textarea name="tipo_publicacion" id="tipo_publicacion" rows="3" class="large-text"><?php echo esc_textarea($pub->tipo_publicacion); ?></textarea></td>
+                    <th><label for="revista">Revista (opcional)</label></th>
+                    <td><input type="text" name="revista" id="revista" class="regular-text" value="<?php echo esc_attr($pub->revista); ?>"></td>
                 </tr>
             </table>
             <p class="submit">
@@ -417,12 +430,13 @@ class Publicaciones_Admin {
     private function guardar_edicion($id) {
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
-
+/*  */
         $data = [
             'titulo' => sanitize_text_field($_POST['titulo']),
             'autores' => sanitize_textarea_field($_POST['autores']),
             'anio' => intval($_POST['anio']),
             'tipo_publicacion' => sanitize_textarea_field($_POST['tipo_publicacion']),
+            'revista' => isset($_POST['revista']) ? sanitize_text_field($_POST['revista']) : null
         ];
 
         $pub = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id=%d", $id));
@@ -513,7 +527,8 @@ class Publicaciones_Admin {
                         'autores' => sanitize_textarea_field($autores),
                         'anio' => intval($anyo),
                         'pdf_path' => $upload_url . $pdf_dest_name,
-                        'bib_path' => $upload_url . $bib_dest_name
+                        'bib_path' => $upload_url . $bib_dest_name,
+                        'revista'  => null
                     ]
                 );
 
