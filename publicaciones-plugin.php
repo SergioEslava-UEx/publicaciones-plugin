@@ -17,6 +17,8 @@ define( 'PUB_PLUGIN_URL', plugin_dir_url(__FILE__) );
 
 // Autocarga de clases
 require_once PUB_PLUGIN_PATH . 'includes/class-publicaciones-loader.php';
+require_once PUB_PLUGIN_PATH . 'includes/class-publicaciones-shortcodes.php';
+
 
 // Activación / desactivación
 register_activation_hook( __FILE__, ['Publicaciones_Loader', 'activate'] );
