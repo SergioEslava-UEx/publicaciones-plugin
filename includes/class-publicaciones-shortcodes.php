@@ -48,7 +48,7 @@ function robolab_publicaciones_shortcode( $atts ) {
 
     $html = "<ul class='robolab-publicaciones'>";
     foreach ( $rows as $r ) {
-        $html .= "<li><strong>{$r->titulo}</strong> – {$r->journal} ({$r->year})</li>";
+        $html .= "<li><strong>{$r->titulo}</strong> – {$r->revista} ({$r->anio})</li>";
     }
     $html .= "</ul>";
 
