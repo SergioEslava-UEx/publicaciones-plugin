@@ -121,9 +121,34 @@ class Publicaciones_Admin {
         echo '<input type="submit" name="pub_reset" class="button button-primary" value="Resetear plugin por completo">';
         echo '</form>';
 
-        // Exportación BD
+        // --- EXPORTACIÓN DE LA BASE DE DATOS ---
+        echo '<h2>💾 Exportar base de datos</h2>';
+        if ( isset($_POST['pub_exportar']) ) {
+            $export_path = WP_CONTENT_DIR . '/uploads/publicaciones_export.csv';
+            if ($this->db->export_to_csv($export_path)) {
+                echo '<p>Exportación realizada correctamente: <a href="' . content_url('uploads/publicaciones_export.csv') . '" target="_blank">Descargar CSV</a></p>';
+            } else {
+                echo '<p style="color:red;">Error al exportar la base de datos.</p>';
+            }
+        }
+        echo '<form method="post">';
+        echo '<input type="submit" name="pub_exportar" class="button button-primary" value="Exportar a CSV">';
+        echo '</form>';
 
-        // Importación BD
+        // --- IMPORTACIÓN DE LA BASE DE DATOS ---
+        echo '<h2>📂 Importar base de datos desde CSV</h2>';
+        if ( isset($_FILES['pub_importar_file']) && $_FILES['pub_importar_file']['error'] == 0 ) {
+            $uploaded_file = $_FILES['pub_importar_file']['tmp_name'];
+            if ($this->db->import_from_csv($uploaded_file)) {
+                echo '<p>Importación realizada correctamente.</p>';
+            } else {
+                echo '<p style="color:red;">Error al importar la base de datos.</p>';
+            }
+        }
+        echo '<form method="post" enctype="multipart/form-data">';
+        echo '<input type="file" name="pub_importar_file" accept=".csv"> ';
+        echo '<input type="submit" name="pub_importar_submit" class="button button-primary" value="Importar CSV">';
+        echo '</form>';
 
 
         echo '</div>';

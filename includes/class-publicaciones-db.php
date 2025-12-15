@@ -53,4 +53,54 @@ class Publicaciones_DB {
         // Aplica el esquema. Si la tabla ya existe, ajusta lo necesario.
         dbDelta($sql);
     }
+
+    /**
+     * Exporta la tabla completa a un archivo CSV
+     */
+    public function export_to_csv($file_path) {
+        global $wpdb;
+        $rows = $wpdb->get_results("SELECT * FROM {$this->table_name}", ARRAY_A);
+
+        if (empty($rows)) return false;
+
+        $fp = fopen($file_path, 'w');
+        if (!$fp) return false;
+
+        // Escribir cabecera
+        fputcsv($fp, array_keys($rows[0]));
+
+        // Escribir filas
+        foreach ($rows as $row) {
+            fputcsv($fp, $row);
+        }
+
+        fclose($fp);
+        return true;
+    }
+
+    /**
+     * Importa datos desde un archivo CSV
+     */
+    public function import_from_csv($file_path) {
+        global $wpdb;
+
+        if (!file_exists($file_path)) return false;
+
+        $fp = fopen($file_path, 'r');
+        if (!$fp) return false;
+
+        $header = fgetcsv($fp);
+        if (!$header) return false;
+
+        while (($row = fgetcsv($fp)) !== false) {
+            $data = array_combine($header, $row);
+            // Insertar o actualizar registro
+            $wpdb->replace($this->table_name, $data); // replace hace insert o update por PRIMARY KEY
+        }
+
+        fclose($fp);
+        return true;
+    }
+
+
 }
