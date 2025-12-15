@@ -1,5 +1,16 @@
 <?php
 if ( !defined('ABSPATH') ) exit;
+
+// Definicion de los tipos de publicacion
+define('TIPOS_PUBLICACION', [
+    'Tesis',
+    'Trabajo Fin de Estudios',
+    'Congreso',
+    'Revista',
+    'Preprint',
+    'Libro'
+]);
+
 /**
  * Interfaz de administración del plugin "Publicaciones Científicas".
  * - Añade la opción de menú en el panel de WordPress.
@@ -10,6 +21,7 @@ if ( !defined('ABSPATH') ) exit;
  * No crea páginas públicas ni shortcodes; todo ocurre dentro del área de administración.
  */
 class Publicaciones_Admin {
+
 
     public function __construct($db) {
         $this->db = $db;
@@ -187,6 +199,20 @@ class Publicaciones_Admin {
                     <td><input type="number" name="anio" id="anio" min="1900" max="2099" step="1"></td>
                 </tr>
                 <tr>
+                    <th><label for="tipo_publicacion">Tipo de Publicación</label></th>
+                    <td>
+                        <select name="tipo_publicacion" id="tipo_publicacion" required>
+                            <option value="">-- Seleccionar --</option>
+                            <?php
+                            // Recorrer los tipos de publicación definidos en la constante
+                            foreach (TIPOS_PUBLICACION as $tipo) {
+                                echo '<option value="' . esc_attr($tipo) . '">' . esc_html($tipo) . '</option>';
+                            }
+                            ?>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
                     <th><label for="pdf">Archivo PDF</label></th>
                     <td><input type="file" name="pdf" id="pdf" accept=".pdf" required></td>
                 </tr>
@@ -252,6 +278,14 @@ class Publicaciones_Admin {
             $bib_path = $upload_url . $bib_name;
         }
 
+        // Obtener y validar el tipo de publicación
+        $tipo_publicacion = isset($_POST['tipo_publicacion']) ? sanitize_text_field($_POST['tipo_publicacion']) : '';
+
+        // Verificar si el valor es uno de los permitidos
+        if (!in_array($tipo_publicacion, TIPOS_PUBLICACION)) {
+            $tipo_publicacion = null; // O manejar error según prefieras
+        }
+
         // Insertar en la base de datos
         $wpdb->insert(
             $table,
@@ -259,6 +293,7 @@ class Publicaciones_Admin {
                 'titulo' => sanitize_text_field($_POST['titulo']),
                 'autores' => sanitize_textarea_field($_POST['autores']),
                 'anio' => intval($_POST['anio']),
+                'tipo_publicacion' => $tipo_publicacion,
                 'pdf_path' => $pdf_path,
                 'bib_path' => $bib_path,
                 'revista' => isset($_POST['revista']) ? sanitize_text_field($_POST['revista']) : null
@@ -452,8 +487,18 @@ class Publicaciones_Admin {
                     <td><input type="text" name="revista" id="revista" class="regular-text" value="<?php echo esc_attr($pub->revista); ?>"></td>
                 </tr>
                 <tr>
-                    <th><label for="tipo_publicacion">Tipo de publicación (opcional)</label></th>
-                    <td><input type="text" name="tipo_publicacion" id="tipo_publicacion" class="regular-text" value="<?php echo esc_attr($pub->tipo_publicacion); ?>"></td>
+                    <th><label for="tipo_publicacion">Tipo de Publicación</label></th>
+                    <td>
+                        <select name="tipo_publicacion" id="tipo_publicacion" required>
+                            <option value="<?php echo esc_attr($pub->tipo_publicacion); ?>"><?php echo esc_attr($pub->tipo_publicacion); ?></option>
+                            <?php
+                            // Recorrer los tipos de publicación definidos en la constante
+                            foreach (TIPOS_PUBLICACION as $tipo) {
+                                echo '<option value="' . esc_attr($tipo) . '">' . esc_html($tipo) . '</option>';
+                            }
+                            ?>
+                        </select>
+                    </td>
                 </tr>
             </table>
             <p class="submit">
