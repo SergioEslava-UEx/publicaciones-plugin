@@ -37,6 +37,7 @@ function robolab_publicaciones_shortcode() {
     if ( ! empty($where) ) {
         $sql .= " WHERE " . implode(" AND ", $where);
     }
+    $sql .= " ORDER BY anio DESC";
 
     // SQL final preparada (con valores “bindeados”)
     $prepared_sql = !empty($params)
@@ -79,8 +80,10 @@ function robolab_publicaciones_shortcode() {
     // ----------------------------------------------------------------------
     // 📌 MOSTRAR SQL PARA DEPURACIÓN
     // ----------------------------------------------------------------------
+    /*
     echo '<p><strong>SQL ejecutada:
     </strong> <code>' . esc_html($prepared_sql) . '</code></p>';
+    */
 
     // ----------------------------------------------------------------------
     // 📌 RESULTADOS
