@@ -59,7 +59,8 @@ class Publicaciones_List_Table extends WP_List_Table {
             'bib_path' => 'BibTeX',
             'revista' => 'Revista',
             'fecha_creacion' => 'Fecha',
-            'acciones' => 'Acciones'
+            'acciones' => 'Acciones',
+            'tipo_publicacion' => 'Tipo'
         ];
     }
 
@@ -74,7 +75,7 @@ class Publicaciones_List_Table extends WP_List_Table {
     public function prepare_items() {
         $columns = $this->get_columns();
         $hidden = [];
-        $sortable = ['id'=>'id','titulo'=>'titulo','anio'=>'anio','revista'=>'revista','fecha_creacion'=>'fecha_creacion'];
+        $sortable = ['id'=>'id','titulo'=>'titulo','anio'=>'anio','revista'=>'revista','fecha_creacion'=>'fecha_creacion', 'tipo_publicacion'=>'tipo_publicacion' ];
         $this->_column_headers = [$columns, $hidden, $sortable];
 
         $this->items = $this->data;

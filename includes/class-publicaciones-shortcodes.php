@@ -1,57 +1,103 @@
 <?php
 
-
-function robolab_publicaciones_shortcode( $atts ) {
+function robolab_publicaciones_shortcode() {
     global $wpdb;
 
-    // Parámetros del shortcode: ejemplo [publicaciones tipo="journal"]
-    $atts = shortcode_atts( array(
-        'tipo' => '',
-        'year' => '',
-        'search' => '',
-    ), $atts );
+    // Campos recibidos desde el formulario
+    $fields = array(
+        'pub_search'  => isset($_GET['pub_search'])  ? sanitize_text_field($_GET['pub_search'])  : '',
+        'pub_anio'    => isset($_GET['pub_anio']) && $_GET['pub_anio'] !== '' ? intval($_GET['pub_anio']) : 0,
+        'pub_revista' => isset($_GET['pub_revista']) ? sanitize_text_field($_GET['pub_revista']) : '',
+    );
 
     $table = $wpdb->prefix . 'publicaciones';
 
-    // Construimos la query dinámicamente
-    $where = array();
-    $params = array();
+    // Construcción dinámica del WHERE
+    $where  = [];
+    $params = [];
 
-    if ( ! empty( $atts['tipo'] ) ) {
-        $where[] = "tipo = %s";
-        $params[] = $atts['tipo'];
+    if ( $fields['pub_search'] !== '' ) {
+        $where[]  = "titulo LIKE %s";
+        $params[] = '%' . $wpdb->esc_like($fields['pub_search']) . '%';
     }
 
-    if ( ! empty( $atts['year'] ) ) {
-        $where[] = "year = %d";
-        $params[] = intval( $atts['year'] );
+    if ( $fields['pub_anio'] !== 0 ) {
+        $where[]  = "anio = %d";
+        $params[] = $fields['pub_anio'];
+        echo '<p><strong>AAAAA</p></strong>';
     }
 
-    if ( ! empty( $atts['search'] ) ) {
-        $where[] = "titulo LIKE %s";
-        $params[] = '%' . $wpdb->esc_like( $atts['search'] ) . '%';
+    if ( $fields['pub_revista'] !== '' ) {
+        $where[]  = "revista LIKE %s";
+        $params[] = '%' . $wpdb->esc_like($fields['pub_revista']) . '%';
     }
 
-    // Montamos la query final
+    // Generar SQL base
     $sql = "SELECT * FROM $table";
-    if ( ! empty( $where ) ) {
-        $sql .= " WHERE " . implode( " AND ", $where );
+    if ( ! empty($where) ) {
+        $sql .= " WHERE " . implode(" AND ", $where);
     }
 
-    // Ejecutar consulta
-    $rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ) );
+    // SQL final preparada (con valores “bindeados”)
+    $prepared_sql = !empty($params)
+        ? $wpdb->prepare($sql, $params)
+        : $sql;
 
-    // Generar salida HTML
-    if ( empty( $rows ) ) {
-        return "<p>No se encontraron publicaciones.</p>";
+    // Ejecutar SQL
+    $rows = $wpdb->get_results($prepared_sql);
+
+    // ----------------------------------------------------------------------
+    // 📌 FORMULARIO HTML
+    // ----------------------------------------------------------------------
+
+    ob_start();
+    ?>
+
+    <form method="GET" class="robolab-filtros">
+        <div>
+            <label>Buscar título:</label>
+            <input type="text" name="pub_search" value="<?php echo esc_attr($fields['pub_search']); ?>">
+        </div>
+
+        <div>
+            <label>Año:</label>
+            <input type="number" name="pub_anio" value="<?php echo esc_attr($fields['pub_anio']); ?>">
+        </div>
+
+        <div>
+            <label>Revista:</label>
+            <input type="text" name="pub_revista" value="<?php echo esc_attr($fields['pub_revista']); ?>">
+        </div>
+
+        <button type="submit">Filtrar</button>
+    </form>
+
+    <hr>
+
+    <?php
+
+    // ----------------------------------------------------------------------
+    // 📌 MOSTRAR SQL PARA DEPURACIÓN
+    // ----------------------------------------------------------------------
+    echo '<p><strong>SQL ejecutada:
+    </strong> <code>' . esc_html($prepared_sql) . '</code></p>';
+
+    // ----------------------------------------------------------------------
+    // 📌 RESULTADOS
+    // ----------------------------------------------------------------------
+
+    if ( empty($rows) ) {
+        echo "<p>No se encontraron publicaciones.</p>";
+        return ob_get_clean();
     }
 
-    $html = "<ul class='robolab-publicaciones'>";
+    echo "<ul class='robolab-publicaciones'>";
     foreach ( $rows as $r ) {
-        $html .= "<li><strong>{$r->titulo}</strong> – {$r->revista} ({$r->anio})</li>";
+        echo "<li><strong>{$r->titulo}</strong> – {$r->revista} ({$r->anio})</li>";
     }
-    $html .= "</ul>";
+    echo "</ul>";
 
-    return $html;
+    return ob_get_clean();
 }
-add_shortcode( 'publicaciones', 'robolab_publicaciones_shortcode' );
+
+add_shortcode('publicaciones', 'robolab_publicaciones_shortcode');

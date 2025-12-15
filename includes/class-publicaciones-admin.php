@@ -106,18 +106,25 @@ class Publicaciones_Admin {
         echo '<input type="submit" name="pub_vaciar" class="button button-secondary" value="Vaciar base de datos">';
         echo '</form>';
 
+        // Volcar publicaciones desde una carpeta local
         echo '<h2>Volcar publicaciones desde carpeta local</h2>';
         echo '<form method="post">';
         echo '<input type="text" name="ruta_volcado" placeholder="/ruta/a/publicaciones/" style="width:400px;"> ';
         echo '<input type="submit" name="pub_volcar" class="button button-primary" value="Volcar publicaciones">';
         echo '</form>';
 
+        // Hard Reset del plugin
         echo '<h2>🧨 Resetear completamente el plugin</h2>';
         echo '<p style="color:red;font-weight:bold;">¡Esto borrará la tabla y la recreará desde cero! Úsalo solo si sabes lo que haces.</p>';
         echo '<form method="post" onsubmit="return confirm(\'⚠️ Esto borrará toda la información y recreará la base de datos.\n\n¿Seguro que quieres continuar?\');">';
         wp_nonce_field('pub_reset_nonce', 'pub_reset_nonce_field');
         echo '<input type="submit" name="pub_reset" class="button button-primary" value="Resetear plugin por completo">';
         echo '</form>';
+
+        // Exportación BD
+
+        // Importación BD
+
 
         echo '</div>';
     }
@@ -291,6 +298,7 @@ class Publicaciones_Admin {
         echo '<th>BibTeX</th>';
         echo '<th>Fecha</th>';
         echo '<th>Revista</th>';
+        echo '<th>Tipo</th>';
         echo '<th>Acciones</th>';
         echo '</tr></thead><tbody>';
 
@@ -418,6 +426,10 @@ class Publicaciones_Admin {
                     <th><label for="revista">Revista (opcional)</label></th>
                     <td><input type="text" name="revista" id="revista" class="regular-text" value="<?php echo esc_attr($pub->revista); ?>"></td>
                 </tr>
+                <tr>
+                    <th><label for="tipo_publicacion">Tipo de publicación (opcional)</label></th>
+                    <td><input type="text" name="tipo_publicacion" id="tipo_publicacion" class="regular-text" value="<?php echo esc_attr($pub->tipo_publicacion); ?>"></td>
+                </tr>
             </table>
             <p class="submit">
                 <input type="submit" name="pub_editar_guardar" class="button button-primary" value="Guardar cambios">
@@ -510,8 +522,8 @@ class Publicaciones_Admin {
                 }
 
                 // Generar nombres únicos para WordPress
-                $pdf_dest_name = time() . '-' . basename($pdf_path_origen);
-                $bib_dest_name = time() . '-' . basename($bib_path_origen);
+                $pdf_dest_name = basename($pdf_path_origen);
+                $bib_dest_name = basename($bib_path_origen);
 
                 $pdf_dest = $upload_dir . $pdf_dest_name;
                 $bib_dest = $upload_dir . $bib_dest_name;
@@ -528,7 +540,8 @@ class Publicaciones_Admin {
                         'anio' => intval($anyo),
                         'pdf_path' => $upload_url . $pdf_dest_name,
                         'bib_path' => $upload_url . $bib_dest_name,
-                        'revista'  => null
+                        'revista'  => null,
+                        'tipo_publicacion' => null
                     ]
                 );
 
