@@ -22,6 +22,7 @@ define('TIPOS_PUBLICACION', [
  */
 class Publicaciones_Admin {
 
+    protected $db;
 
     public function __construct($db) {
         $this->db = $db;
@@ -47,10 +48,6 @@ class Publicaciones_Admin {
 
     /**
      * Renderiza la pantalla principal del plugin en el administrador.
-     *
-     * Flujo general:
-     *  - Si llega una acción por POST (crear/editar/eliminar/importar), primero se valida el nonce (CSRF).
-     *  - Después se muestran filtros/búsqueda, listado paginado y el formulario de alta/edición.
      */
     public function render_admin_page() {
         echo '<div class="wrap"><h1>📚 Publicaciones Científicas</h1>';
@@ -60,6 +57,7 @@ class Publicaciones_Admin {
             $this->guardar_publicacion();
         }
 
+        // Vaciar base de datos
         if ( isset($_POST['pub_vaciar']) && isset($_POST['pub_vaciar_nonce_field']) && wp_verify_nonce($_POST['pub_vaciar_nonce_field'], 'pub_vaciar_nonce') ) {
             $this->vaciar_publicaciones();
         }
@@ -74,6 +72,7 @@ class Publicaciones_Admin {
             $this->editar_publicacion_form(intval($_GET['editar_id']));
         }
 
+        // Volcado masivo desde carpeta local
         if ( isset($_POST['pub_volcar']) && !empty($_POST['ruta_volcado']) ) {
             $this->volcar_publicaciones(trim($_POST['ruta_volcado']));
         }
@@ -162,7 +161,6 @@ class Publicaciones_Admin {
         echo '<input type="submit" name="pub_importar_submit" class="button button-primary" value="Importar CSV">';
         echo '</form>';
 
-
         echo '</div>';
     }
 
@@ -180,6 +178,47 @@ class Publicaciones_Admin {
         echo '<div class="updated"><p>✔️ La base de datos ha sido reseteada y recreada correctamente.</p></div>';
     }
 
+    /**
+     * Genera un nombre de fichero válido manteniendo el original
+     * y recortándolo si es necesario.
+     *
+     * - Mantiene el nombre original (autores + título) hasta donde quepa.
+     * - Añade un prefijo corto uniqid (8 chars) para evitar colisiones.
+     * - Garantiza que el nombre final no exceda ~250 bytes.
+     */
+    private function generar_nombre_archivo_recortado( $nombre_original ) {
+        // Límite seguro para el componente de nombre (ext4 suele permitir 255 bytes)
+        $max_bytes = 250;
+
+        $prefix = substr(uniqid(), 0, 8) . '-';
+
+        // Separar nombre y extensión
+        $ext  = pathinfo($nombre_original, PATHINFO_EXTENSION);
+        $name = pathinfo($nombre_original, PATHINFO_FILENAME);
+
+        // Por si acaso
+        if ($ext !== '') {
+            $ext_part = '.' . $ext;
+        } else {
+            $ext_part = '';
+        }
+
+        $full = $prefix . $name . $ext_part;
+
+        // Mientras el nombre completo sea demasiado largo, recortamos el final del nombre
+        while (strlen($full) > $max_bytes && strlen($name) > 0) {
+            // recortamos de 5 en 5 caracteres para no cargarnos demasiado de golpe
+            $name = substr($name, 0, strlen($name) - 5);
+            $full = $prefix . $name . $ext_part;
+        }
+
+        if ($name === '') {
+            // Último recurso: algo muy corto pero válido
+            $full = $prefix . 'file' . $ext_part;
+        }
+
+        return $full;
+    }
 
     // Muestra el formulario de alta/edición de publicaciones
     private function mostrar_formulario() {
@@ -204,7 +243,6 @@ class Publicaciones_Admin {
                         <select name="tipo_publicacion" id="tipo_publicacion" required>
                             <option value="">-- Seleccionar --</option>
                             <?php
-                            // Recorrer los tipos de publicación definidos en la constante
                             foreach (TIPOS_PUBLICACION as $tipo) {
                                 echo '<option value="' . esc_attr($tipo) . '">' . esc_html($tipo) . '</option>';
                             }
@@ -238,10 +276,6 @@ class Publicaciones_Admin {
 
     /**
      * Guarda una publicación y gestiona las subidas de PDF/BIB.
-     *
-     * - Valida/sanea los campos.
-     * - Si hay archivos, los mueve a /wp-content/uploads/publicaciones/{AÑO}/ y construye las URLs.
-     * - Inserta (o actualiza) la fila en la base de datos.
      */
     private function guardar_publicacion() {
         global $wpdb;
@@ -265,14 +299,14 @@ class Publicaciones_Admin {
         $bib_path = '';
 
         if ( isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK ) {
-            $pdf_name = time() . '-' . basename($_FILES['pdf']['name']);
+            $pdf_name = $this->generar_nombre_archivo_recortado($_FILES['pdf']['name']);
             $pdf_dest = $upload_dir . $pdf_name;
             move_uploaded_file($_FILES['pdf']['tmp_name'], $pdf_dest);
             $pdf_path = $upload_url . $pdf_name;
         }
 
         if ( isset($_FILES['bib']) && $_FILES['bib']['error'] === UPLOAD_ERR_OK ) {
-            $bib_name = time() . '-' . basename($_FILES['bib']['name']);
+            $bib_name = $this->generar_nombre_archivo_recortado($_FILES['bib']['name']);
             $bib_dest = $upload_dir . $bib_name;
             move_uploaded_file($_FILES['bib']['tmp_name'], $bib_dest);
             $bib_path = $upload_url . $bib_name;
@@ -280,23 +314,21 @@ class Publicaciones_Admin {
 
         // Obtener y validar el tipo de publicación
         $tipo_publicacion = isset($_POST['tipo_publicacion']) ? sanitize_text_field($_POST['tipo_publicacion']) : '';
-
-        // Verificar si el valor es uno de los permitidos
         if (!in_array($tipo_publicacion, TIPOS_PUBLICACION)) {
-            $tipo_publicacion = null; // O manejar error según prefieras
+            $tipo_publicacion = null;
         }
 
         // Insertar en la base de datos
         $wpdb->insert(
             $table,
             [
-                'titulo' => sanitize_text_field($_POST['titulo']),
-                'autores' => sanitize_textarea_field($_POST['autores']),
-                'anio' => intval($_POST['anio']),
+                'titulo'           => sanitize_text_field($_POST['titulo']),
+                'autores'          => sanitize_textarea_field($_POST['autores']),
+                'anio'             => intval($_POST['anio']),
                 'tipo_publicacion' => $tipo_publicacion,
-                'pdf_path' => $pdf_path,
-                'bib_path' => $bib_path,
-                'revista' => isset($_POST['revista']) ? sanitize_text_field($_POST['revista']) : null
+                'pdf_path'         => $pdf_path,
+                'bib_path'         => $bib_path,
+                'revista'          => isset($_POST['revista']) ? sanitize_text_field($_POST['revista']) : null
             ]
         );
 
@@ -305,17 +337,12 @@ class Publicaciones_Admin {
 
     /**
      * Lista las publicaciones con búsqueda, filtro por año y paginación.
-     *
-     * - Búsqueda: en título y autores (LIKE).
-     * - Filtro: por año exacto.
-     * - Orden: fecha_creacion DESC.
-     * - Paginación: LIMIT + OFFSET.
      */
     private function mostrar_listado($busqueda = '', $filtro_anyo = '', $pagina_actual = 1, $items_por_pagina = 20){
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
 
-        $where = [];
+        $where  = [];
         $params = [];
 
         // Filtrado por búsqueda en título o autores
@@ -333,15 +360,21 @@ class Publicaciones_Admin {
 
         // Construir SQL final
         $sql = "SELECT * FROM $table";
-        if ($where) $sql .= " WHERE " . implode(" AND ", $where);
+        if ($where) {
+            $sql .= " WHERE " . implode(" AND ", $where);
+        }
         $sql .= " ORDER BY fecha_creacion DESC";
 
         // Paginación
         $offset = ($pagina_actual - 1) * $items_por_pagina;
-        $sql .= " LIMIT $offset, $items_por_pagina";
+        $sql   .= " LIMIT $offset, $items_por_pagina";
 
         // Importante: preparar SOLO si hay %s/%d en $sql.
-        $publicaciones = $wpdb->get_results($wpdb->prepare($sql, ...$params));
+        if ($params) {
+            $publicaciones = $wpdb->get_results($wpdb->prepare($sql, ...$params));
+        } else {
+            $publicaciones = $wpdb->get_results($sql);
+        }
 
         if ( empty($publicaciones) ) {
             echo '<p>No hay publicaciones registradas aún.</p>';
@@ -378,12 +411,12 @@ class Publicaciones_Admin {
             echo '<td>'.esc_html($pub->tipo_publicacion).'</td>';
 
             // Enlaces de acción (edición/eliminación)
-            $edit_link = admin_url('admin.php?page=publicaciones&editar_id=' . $pub->id);
+            $edit_link   = admin_url('admin.php?page=publicaciones&editar_id=' . $pub->id);
             $delete_link = admin_url('admin.php?page=publicaciones&borrar_id=' . $pub->id);
 
             echo '<td>';
-                echo '<a href="'.esc_url($edit_link).'" class="button button-small">Editar</a> ';
-                echo '<a href="'.esc_url($delete_link).'" class="button button-small" onclick="return confirm(\'¿Seguro que quieres eliminar esta publicación?\');">Eliminar</a>';
+            echo '<a href="'.esc_url($edit_link).'" class="button button-small">Editar</a> ';
+            echo '<a href="'.esc_url($delete_link).'" class="button button-small" onclick="return confirm(\'¿Seguro que quieres eliminar esta publicación?\');">Eliminar</a>';
             echo '</td>';
             echo '</tr>';
         }
@@ -391,9 +424,17 @@ class Publicaciones_Admin {
         echo '</tbody></table>';
 
         // Paginación (conteo total)
-        $total_resultados = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM $table" . ($where ? " WHERE " . implode(" AND ", $where) : ""), ...$params
-        ));
+        $count_sql = "SELECT COUNT(*) FROM $table";
+        if ($where) {
+            $count_sql .= " WHERE " . implode(" AND ", $where);
+        }
+
+        if ($params) {
+            $total_resultados = $wpdb->get_var($wpdb->prepare($count_sql, ...$params));
+        } else {
+            $total_resultados = $wpdb->get_var($count_sql);
+        }
+
         $total_paginas = ceil($total_resultados / $items_por_pagina);
 
         if ($total_paginas > 1) {
@@ -492,7 +533,6 @@ class Publicaciones_Admin {
                         <select name="tipo_publicacion" id="tipo_publicacion" required>
                             <option value="<?php echo esc_attr($pub->tipo_publicacion); ?>"><?php echo esc_attr($pub->tipo_publicacion); ?></option>
                             <?php
-                            // Recorrer los tipos de publicación definidos en la constante
                             foreach (TIPOS_PUBLICACION as $tipo) {
                                 echo '<option value="' . esc_attr($tipo) . '">' . esc_html($tipo) . '</option>';
                             }
@@ -512,29 +552,31 @@ class Publicaciones_Admin {
     private function guardar_edicion($id) {
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
-/*  */
+
         $data = [
-            'titulo' => sanitize_text_field($_POST['titulo']),
-            'autores' => sanitize_textarea_field($_POST['autores']),
-            'anio' => intval($_POST['anio']),
+            'titulo'           => sanitize_text_field($_POST['titulo']),
+            'autores'          => sanitize_textarea_field($_POST['autores']),
+            'anio'             => intval($_POST['anio']),
             'tipo_publicacion' => sanitize_textarea_field($_POST['tipo_publicacion']),
-            'revista' => isset($_POST['revista']) ? sanitize_text_field($_POST['revista']) : null
+            'revista'          => isset($_POST['revista']) ? sanitize_text_field($_POST['revista']) : null
         ];
 
-        $pub = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id=%d", $id));
+        $pub     = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id=%d", $id));
         $uploads = wp_upload_dir();
-        $year = !empty($_POST['anio']) ? intval($_POST['anio']) : date('Y');
+        $year    = !empty($_POST['anio']) ? intval($_POST['anio']) : date('Y');
         $upload_dir = $uploads['basedir'] . '/publicaciones/' . $year . '/';
         $upload_url = $uploads['baseurl'] . '/publicaciones/' . $year . '/';
 
-        if ( ! file_exists( $upload_dir ) ) wp_mkdir_p( $upload_dir );
+        if ( ! file_exists( $upload_dir ) ) {
+            wp_mkdir_p( $upload_dir );
+        }
 
         // Reemplazar PDF si se sube
         if ( isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK ) {
             if ( $pub->pdf_path && file_exists(ABSPATH . str_replace(site_url().'/', '', $pub->pdf_path)) ) {
                 unlink(ABSPATH . str_replace(site_url().'/', '', $pub->pdf_path));
             }
-            $pdf_name = time() . '-' . basename($_FILES['pdf']['name']);
+            $pdf_name = $this->generar_nombre_archivo_recortado($_FILES['pdf']['name']);
             move_uploaded_file($_FILES['pdf']['tmp_name'], $upload_dir . $pdf_name);
             $data['pdf_path'] = $upload_url . $pdf_name;
         }
@@ -544,7 +586,7 @@ class Publicaciones_Admin {
             if ( $pub->bib_path && file_exists(ABSPATH . str_replace(site_url().'/', '', $pub->bib_path)) ) {
                 unlink(ABSPATH . str_replace(site_url().'/', '', $pub->bib_path));
             }
-            $bib_name = time() . '-' . basename($_FILES['bib']['name']);
+            $bib_name = $this->generar_nombre_archivo_recortado($_FILES['bib']['name']);
             move_uploaded_file($_FILES['bib']['tmp_name'], $upload_dir . $bib_name);
             $data['bib_path'] = $upload_url . $bib_name;
         }
@@ -554,74 +596,211 @@ class Publicaciones_Admin {
         echo '<div class="notice notice-success"><p>✅ Publicación actualizada correctamente.</p></div>';
     }
 
+        /**
+     * Trunca una cadena a $max caracteres (para columnas VARCHAR)
+     * usando mb_* si está disponible.
+     */
+    private function truncar_cadena($str, $max) {
+        if (!is_string($str)) {
+            return $str;
+        }
+
+        // Seguridad extra por si viene con espacios locos
+        $str = trim($str);
+
+        if (function_exists('mb_strlen')) {
+            if (mb_strlen($str, 'UTF-8') <= $max) {
+                return $str;
+            }
+            return mb_substr($str, 0, $max - 1, 'UTF-8') . '…';
+        } else {
+            if (strlen($str) <= $max) {
+                return $str;
+            }
+            return substr($str, 0, $max - 1) . '…';
+        }
+    }
+
+
     // Importación masiva de publicaciones desde una ruta base con subcarpetas por año.
     public function volcar_publicaciones($ruta_origen) {
         global $wpdb;
-        $table = $wpdb->prefix . 'publicaciones';
+        $table   = $wpdb->prefix . 'publicaciones';
 
         // Carpeta de subida estándar WordPress
         $uploads = wp_upload_dir();
-        
         $archivos_volcados = 0;
+        $errores = [];
 
-        // Recorrer carpetas por año
-        foreach ( glob($ruta_origen . '/*', GLOB_ONLYDIR) as $carpeta_anyo ) {
+        // Recorrer subcarpetas por año (2019, 2020, 2025, ...)
+        foreach (glob($ruta_origen . '/*', GLOB_ONLYDIR) as $carpeta_anyo) {
             $anyo = basename($carpeta_anyo);
+
             $upload_dir = $uploads['basedir'] . '/publicaciones/' . $anyo . '/';
             $upload_url = $uploads['baseurl'] . '/publicaciones/' . $anyo . '/';
 
-            if ( ! file_exists($upload_dir) ) wp_mkdir_p($upload_dir);
+            if (!file_exists($upload_dir)) {
+                wp_mkdir_p($upload_dir);
+            }
 
-            // Buscar archivos PDF y BibTeX
-            $pdfs = glob($carpeta_anyo . '/*.pdf');
+            // Listado robusto de ficheros
+            $entries = scandir($carpeta_anyo);
+            if ($entries === false) {
+                continue;
+            }
 
-            foreach ( $pdfs as $pdf_path_origen ) {
-                $nombre = basename($pdf_path_origen, '.pdf');
-                $bib_path_origen = $carpeta_anyo . '/' . $nombre . '.bib';
-
-                if ( !file_exists($bib_path_origen) ) continue; // ignorar si no hay .bib
-
-                // Extraer autores y título desde el nombre
-                if ( strpos($nombre, '|') !== false ) {
-                    list($autores, $titulo) = explode('|', $nombre, 2);
-                    $autores = trim($autores);
-                    $titulo = trim($titulo);
-                } else {
-                    $autores = '';
-                    $titulo = $nombre;
+            foreach ($entries as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
                 }
 
-                // Generar nombres únicos para WordPress
-                $pdf_dest_name = basename($pdf_path_origen);
-                $bib_dest_name = basename($bib_path_origen);
+                $pdf_path_origen = $carpeta_anyo . '/' . $entry;
+
+                if (!is_file($pdf_path_origen)) {
+                    continue;
+                }
+
+                $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+                if ($ext !== 'pdf') {
+                    continue;
+                }
+
+                $nombre = pathinfo($entry, PATHINFO_FILENAME);
+                $bib_path_origen = $carpeta_anyo . '/' . $nombre . '.bib';
+
+                if (!file_exists($bib_path_origen)) {
+                    // Si no hay .bib hacemos *skip*
+                    continue;
+                }
+
+                // "Autores | Título"
+                if (strpos($nombre, '|') !== false) {
+                    list($autores, $titulo) = explode('|', $nombre, 2);
+                    $autores = trim($autores);
+                    $titulo  = trim($titulo);
+                } else {
+                    $autores = '';
+                    $titulo  = $nombre;
+                }
+
+                // ---------- NOMBRE DE FICHERO SEGURO (nuevo, mantiene la extensión) ----------
+
+                // Nombre original del PDF
+                $origBase = basename($pdf_path_origen);              // "Autores | Título larguísimo.pdf"
+                $ext      = strtolower(pathinfo($origBase, PATHINFO_EXTENSION)); // "pdf"
+                $nameOnly = pathinfo($origBase, PATHINFO_FILENAME); // "Autores | Título larguísimo"
+
+                // Prefijo único (un poco más cortito)
+                $prefix = uniqid('', false); // ej. "6964fd968661f6"
+                $sep    = '-';
+                $extPdf = '.pdf';
+                $extBib = '.bib';
+
+                // ---- límites teniendo en cuenta el VARCHAR(255) de la BD ----
+                $maxPathLen  = 255; // límite de la columna pdf_path / bib_path
+                // longitud del baseurl tipo "http://prueba.local/wp-content/uploads/publicaciones/2025/"
+                if (function_exists('mb_strlen')) {
+                    $baseUrlLen = mb_strlen($upload_url, 'UTF-8');
+                } else {
+                    $baseUrlLen = strlen($upload_url);
+                }
+
+                // longitud máxima permitida SOLO para el nombre de fichero (prefijo + '-' + nombre + ext)
+                $maxFilenameLen = $maxPathLen - $baseUrlLen;
+                if ($maxFilenameLen < 50) {
+                    // por seguridad, que permita algo razonable
+                    $maxFilenameLen = 50;
+                }
+
+                // nombre sin extensión
+                $origBase = basename($pdf_path_origen);
+                $ext      = strtolower(pathinfo($origBase, PATHINFO_EXTENSION)); // "pdf"
+                $nameOnly = pathinfo($origBase, PATHINFO_FILENAME);
+
+                $prefix = uniqid('', false);
+                $sep    = '-';
+                $extPdf = '.pdf';
+                $extBib = '.bib';
+
+                // cuántos caracteres puede ocupar SOLO la parte "nameOnly"
+                $maxNameLen = $maxFilenameLen - strlen($prefix) - strlen($sep) - strlen($extPdf);
+                if ($maxNameLen < 20) {
+                    $maxNameLen = 20;
+                }
+
+                if (function_exists('mb_strlen')) {
+                    if (mb_strlen($nameOnly, 'UTF-8') > $maxNameLen) {
+                        $nameTrunc = mb_substr($nameOnly, 0, $maxNameLen, 'UTF-8');
+                    } else {
+                        $nameTrunc = $nameOnly;
+                    }
+                } else {
+                    if (strlen($nameOnly) > $maxNameLen) {
+                        $nameTrunc = substr($nameOnly, 0, $maxNameLen);
+                    } else {
+                        $nameTrunc = $nameOnly;
+                    }
+                }
+
+                // nombres finales en disco
+                $pdf_dest_name = $prefix . $sep . $nameTrunc . $extPdf;
+                $bib_dest_name = $prefix . $sep . $nameTrunc . $extBib;
 
                 $pdf_dest = $upload_dir . $pdf_dest_name;
                 $bib_dest = $upload_dir . $bib_dest_name;
 
-                copy($pdf_path_origen, $pdf_dest);
-                copy($bib_path_origen, $bib_dest);
 
-                // Insertar en la base de datos
-                $wpdb->insert(
+
+                // Copiar ficheros (si falla, registramos error y seguimos)
+                if (!@copy($pdf_path_origen, $pdf_dest)) {
+                    $errores[] = 'copy pdf: ' . $pdf_path_origen;
+                    continue;
+                }
+                if (!@copy($bib_path_origen, $bib_dest)) {
+                    $errores[] = 'copy bib: ' . $bib_path_origen;
+                    continue;
+                }
+
+                // ---------- TRUNCAR CAMPOS PARA LA BD ----------
+                $titulo_db   = $this->truncar_cadena($titulo, 255);
+                $autores_db  = $autores; // TEXT, no hace falta recortar normalmente
+                $pdf_path_db = $upload_url . $pdf_dest_name;  // ya seguro
+                $bib_path_db = $upload_url . $bib_dest_name; 
+
+                // Insertar en BD
+                $ok = $wpdb->insert(
                     $table,
                     [
-                        'titulo' => sanitize_text_field($titulo),
-                        'autores' => sanitize_textarea_field($autores),
-                        'anio' => intval($anyo),
-                        'pdf_path' => $upload_url . $pdf_dest_name,
-                        'bib_path' => $upload_url . $bib_dest_name,
-                        'revista'  => null,
-                        'tipo_publicacion' => null
+                        'titulo'           => $titulo_db,
+                        'autores'          => sanitize_textarea_field($autores_db),
+                        'anio'             => intval($anyo),
+                        'pdf_path'         => $pdf_path_db,
+                        'bib_path'         => $bib_path_db,
+                        'revista'          => null,
+                        'tipo_publicacion' => null,
                     ]
                 );
 
-                $archivos_volcados++;
+                if ($ok === false) {
+                    // Guardamos el error y seguimos con el siguiente
+                    $errores[] = 'db: ' . $entry . ' → ' . $wpdb->last_error;
+                } else {
+                    $archivos_volcados++;
+                }
             }
         }
 
-        echo '<div class="notice notice-success"><p>✅ Se han volcado ' . $archivos_volcados . ' publicaciones correctamente.</p></div>';
-    }
+        // Mensaje final
+        echo '<div class="notice notice-success"><p>✅ Se han volcado '
+            . intval($archivos_volcados) . ' publicaciones correctamente.</p></div>';
 
+        if (!empty($errores)) {
+            echo '<div class="notice notice-warning"><p>⚠️ Hubo '
+                . count($errores)
+                . ' elementos con errores (copiado o inserción en BD). '
+                . 'Ejemplo: ' . esc_html($errores[0]) . '</p></div>';
+        }
+    }
 
 
 }
