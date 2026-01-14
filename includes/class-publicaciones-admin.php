@@ -25,6 +25,9 @@ class Publicaciones_Admin {
     /** Mensajes de error/éxito del formulario de alta */
     private $form_notice = '';
 
+    /** Indica si se ha actualizado una publicación en esta petición */
+    private $edit_success = false;
+
     public function __construct($db) {
         $this->db = $db;
     }
@@ -176,28 +179,47 @@ class Publicaciones_Admin {
         echo '<div class="updated"><p>✔️ La base de datos ha sido reseteada y recreada correctamente.</p></div>';
     }
 
-    // Formulario de alta de publicaciones. Repuebla los campos con $_POST cuando hay errores.
+    // Formulario de alta de publicaciones. Repuebla los campos solo cuando el POST viene del botón "Guardar Publicación" (pub_guardar).
     private function mostrar_formulario() {
-        // Valores por defecto desde $_POST para no perder lo escrito si hay error
-        $titulo_val   = isset($_POST['titulo']) ? esc_attr($_POST['titulo']) : '';
-        $autores_val  = isset($_POST['autores']) ? esc_textarea($_POST['autores']) : '';
-        $anio_val     = isset($_POST['anio']) ? intval($_POST['anio']) : '';
-        $revista_val  = isset($_POST['revista']) ? esc_attr($_POST['revista']) : '';
-        $tipo_sel     = isset($_POST['tipo_publicacion']) ? sanitize_text_field($_POST['tipo_publicacion']) : '';
+
+        // ¿El submit que ha llegado es el del formulario de alta?
+        $from_create_form = isset($_POST['pub_guardar']);
+
+        // Valores por defecto solo si venimos de pub_guardar (y ha habido error)
+        $titulo_val  = ($from_create_form && isset($_POST['titulo']))
+            ? esc_attr($_POST['titulo']) : '';
+
+        $autores_val = ($from_create_form && isset($_POST['autores']))
+            ? esc_textarea($_POST['autores']) : '';
+
+        $anio_val    = ($from_create_form && isset($_POST['anio']))
+            ? intval($_POST['anio']) : '';
+
+        $revista_val = ($from_create_form && isset($_POST['revista']))
+            ? esc_attr($_POST['revista']) : '';
+
+        $tipo_sel    = ($from_create_form && isset($_POST['tipo_publicacion']))
+            ? sanitize_text_field($_POST['tipo_publicacion']) : '';
+
         ?>
         <form method="post" enctype="multipart/form-data" style="max-width:600px;">
             <table class="form-table">
                 <tr>
                     <th><label for="titulo">Título</label></th>
-                    <td><input type="text" name="titulo" id="titulo" class="regular-text" required value="<?php echo $titulo_val; ?>"></td>
+                    <td><input type="text" name="titulo" id="titulo"
+                            class="regular-text" required
+                            value="<?php echo $titulo_val; ?>"></td>
                 </tr>
                 <tr>
                     <th><label for="autores">Autores</label></th>
-                    <td><textarea name="autores" id="autores" rows="3" class="large-text"><?php echo $autores_val; ?></textarea></td>
+                    <td><textarea name="autores" id="autores" rows="3"
+                                class="large-text"><?php echo $autores_val; ?></textarea></td>
                 </tr>
                 <tr>
                     <th><label for="anio">Año</label></th>
-                    <td><input type="number" name="anio" id="anio" min="1900" max="2099" step="1" value="<?php echo $anio_val ? esc_attr($anio_val) : ''; ?>"></td>
+                    <td><input type="number" name="anio" id="anio"
+                            min="1900" max="2099" step="1"
+                            value="<?php echo $anio_val ? esc_attr($anio_val) : ''; ?>"></td>
                 </tr>
                 <tr>
                     <th><label for="tipo_publicacion">Tipo de Publicación</label></th>
@@ -207,7 +229,8 @@ class Publicaciones_Admin {
                             <?php
                             foreach (TIPOS_PUBLICACION as $tipo) {
                                 $selected = ($tipo_sel === $tipo) ? 'selected' : '';
-                                echo '<option value="' . esc_attr($tipo) . '" ' . $selected . '>' . esc_html($tipo) . '</option>';
+                                echo '<option value="' . esc_attr($tipo) . '" ' . $selected . '>'
+                                    . esc_html($tipo) . '</option>';
                             }
                             ?>
                         </select>
@@ -224,16 +247,19 @@ class Publicaciones_Admin {
                 <tr>
                     <th><label for="revista">Revista</label></th>
                     <td>
-                        <input type="text" name="revista" id="revista" class="regular-text" value="<?php echo $revista_val; ?>">
+                        <input type="text" name="revista" id="revista"
+                            class="regular-text" value="<?php echo $revista_val; ?>">
                     </td>
                 </tr>
             </table>
             <p class="submit">
-                <input type="submit" name="pub_guardar" class="button button-primary" value="Guardar Publicación">
+                <input type="submit" name="pub_guardar"
+                    class="button button-primary" value="Guardar Publicación">
             </p>
         </form>
         <?php
     }
+
 
     /**
      * Guarda una publicación y gestiona las subidas de PDF/BIB.
@@ -436,9 +462,28 @@ class Publicaciones_Admin {
             echo '<td>'.esc_html($pub->revista).'</td>';
             echo '<td>'.esc_html($pub->tipo_publicacion).'</td>';
 
-            // Enlaces de acción (edición/eliminación)
-            $edit_link = admin_url('admin.php?page=publicaciones&editar_id=' . $pub->id);
-            $delete_link = admin_url('admin.php?page=publicaciones&borrar_id=' . $pub->id);
+            // Enlaces de acción (edición/eliminación) conservando filtros y página actual
+            $edit_link = add_query_arg(
+                [
+                    'page'       => 'publicaciones',
+                    'editar_id'  => $pub->id,
+                    'pub_buscar' => $busqueda,
+                    'pub_anyo'   => $filtro_anyo,
+                    'pub_pagina' => $pagina_actual,
+                ],
+                admin_url('admin.php')
+            );
+
+            $delete_link = add_query_arg(
+                [
+                    'page'       => 'publicaciones',
+                    'borrar_id'  => $pub->id,
+                    'pub_buscar' => $busqueda,
+                    'pub_anyo'   => $filtro_anyo,
+                    'pub_pagina' => $pagina_actual,
+                ],
+                admin_url('admin.php')
+            );
 
             echo '<td>';
                 echo '<a href="'.esc_url($edit_link).'" class="button button-small">Editar</a> ';
@@ -458,12 +503,24 @@ class Publicaciones_Admin {
         if ($total_paginas > 1) {
             echo '<div style="margin-top:10px;">';
             for ($i = 1; $i <= $total_paginas; $i++) {
-                $link = add_query_arg(['pub_pagina' => $i, 'pub_buscar' => $busqueda, 'pub_anyo' => $filtro_anyo]);
+
+                // Construimos la URL desde admin.php para NO arrastrar editar_id ni borrar_id
+                $link = add_query_arg(
+                    [
+                        'page'       => 'publicaciones',
+                        'pub_pagina' => $i,
+                        'pub_buscar' => $busqueda,
+                        'pub_anyo'   => $filtro_anyo,
+                    ],
+                    admin_url('admin.php')
+                );
+
                 $clase = ($i == $pagina_actual) ? 'button button-primary' : 'button';
                 echo '<a href="' . esc_url($link) . '" class="' . $clase . '" style="margin-right:5px;">' . $i . '</a>';
             }
             echo '</div>';
         }
+
     }
 
     // Elimina todas las publicaciones de la tabla
@@ -515,6 +572,11 @@ class Publicaciones_Admin {
         if ( isset($_POST['pub_editar_guardar']) ) {
             $this->guardar_edicion($id);
             $pub = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id=%d", $id)); // refrescar datos
+            
+            // Si la edición fue correcta, no mostramos el formulario de nuevo
+            if ($this->edit_success) {
+            return;
+            }
         }
 
         ?>
@@ -535,11 +597,27 @@ class Publicaciones_Admin {
                 </tr>
                 <tr>
                     <th><label for="pdf">Archivo PDF (opcional)</label></th>
-                    <td><input type="file" name="pdf" id="pdf" accept=".pdf"></td>
+                    <td>
+                        <input type="file" name="pdf" id="pdf" accept=".pdf">
+                        <p class="description">
+                            Deja este campo vacío si no quieres cambiar el PDF.
+                        </p>
+                        <?php if ( !empty($pub->pdf_path) ) : ?>
+                            <p>PDF actual: <a href="<?php echo esc_url($pub->pdf_path); ?>" target="_blank">Ver PDF</a></p>
+                        <?php endif; ?>
+                    </td>
                 </tr>
                 <tr>
                     <th><label for="bib">Archivo BibTeX (.bib, opcional)</label></th>
-                    <td><input type="file" name="bib" id="bib" accept=".bib"></td>
+                    <td>
+                        <input type="file" name="bib" id="bib" accept=".bib">
+                        <p class="description">
+                            Deja este campo vacío si no quieres cambiar el BibTeX.
+                        </p>
+                        <?php if ( !empty($pub->bib_path) ) : ?>
+                            <p>BibTeX actual: <a href="<?php echo esc_url($pub->bib_path); ?>" target="_blank">Ver .bib</a></p>
+                        <?php endif; ?>
+                    </td>
                 </tr>
                 <tr>
                     <th><label for="revista">Revista (opcional)</label></th>
@@ -548,11 +626,13 @@ class Publicaciones_Admin {
                 <tr>
                     <th><label for="tipo_publicacion">Tipo de Publicación</label></th>
                     <td>
-                        <select name="tipo_publicacion" id="tipo_publicacion" required>
-                            <option value="<?php echo esc_attr($pub->tipo_publicacion); ?>"><?php echo esc_attr($pub->tipo_publicacion); ?></option>
+                        <select name="tipo_publicacion" id="tipo_publicacion">
+                            <!-- Opción vacía para poder limpiar el campo -->
+                            <option value="">-- Sin especificar --</option>
                             <?php
                             foreach (TIPOS_PUBLICACION as $tipo) {
-                                echo '<option value="' . esc_attr($tipo) . '">' . esc_html($tipo) . '</option>';
+                                $selected = ($pub->tipo_publicacion === $tipo) ? 'selected' : '';
+                                echo '<option value="' . esc_attr($tipo) . '" ' . $selected . '>' . esc_html($tipo) . '</option>';
                             }
                             ?>
                         </select>
@@ -571,11 +651,14 @@ class Publicaciones_Admin {
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
 
+        $tipo_post = isset($_POST['tipo_publicacion']) ? sanitize_text_field($_POST['tipo_publicacion']) : '';
+        $tipo_publicacion = in_array($tipo_post, TIPOS_PUBLICACION) ? $tipo_post : null;
+
         $data = [
             'titulo'          => sanitize_text_field($_POST['titulo']),
             'autores'         => sanitize_textarea_field($_POST['autores']),
             'anio'            => intval($_POST['anio']),
-            'tipo_publicacion'=> sanitize_textarea_field($_POST['tipo_publicacion']),
+            'tipo_publicacion'=> $tipo_publicacion,
             'revista'         => isset($_POST['revista']) ? sanitize_text_field($_POST['revista']) : null
         ];
 
@@ -610,6 +693,9 @@ class Publicaciones_Admin {
         }
 
         $wpdb->update($table, $data, ['id' => $id]);
+        
+        // Marcamos que la edición fue correcta
+        $this->edit_success = true;
 
         echo '<div class="notice notice-success"><p>✅ Publicación actualizada correctamente.</p></div>';
     }
