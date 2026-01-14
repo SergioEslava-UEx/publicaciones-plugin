@@ -29,9 +29,7 @@ class Publicaciones_Admin {
         $this->db = $db;
     }
 
-    /**
-     * Registra el elemento de menú y la página del plugin en el administrador.
-     */
+    // Registra el elemento de menú y la página del plugin en el administrador.
     public function add_admin_menu() {
         add_menu_page(
             'Publicaciones', // Título de la página
@@ -44,9 +42,7 @@ class Publicaciones_Admin {
         );
     }
 
-    /**
-     * Renderiza la pantalla principal del plugin en el administrador.
-     */
+    // Renderiza la pantalla principal del plugin en el administrador.
     public function render_admin_page() {
         echo '<div class="wrap"><h1>📚 Publicaciones Científicas</h1>';
 
@@ -180,10 +176,7 @@ class Publicaciones_Admin {
         echo '<div class="updated"><p>✔️ La base de datos ha sido reseteada y recreada correctamente.</p></div>';
     }
 
-    /**
-     * Formulario de alta de publicaciones.
-     * Repuebla los campos con $_POST cuando hay errores.
-     */
+    // Formulario de alta de publicaciones. Repuebla los campos con $_POST cuando hay errores.
     private function mostrar_formulario() {
         // Valores por defecto desde $_POST para no perder lo escrito si hay error
         $titulo_val   = isset($_POST['titulo']) ? esc_attr($_POST['titulo']) : '';
@@ -376,9 +369,7 @@ class Publicaciones_Admin {
         return true;
     }
 
-    /**
-     * Lista las publicaciones con búsqueda, filtro por año y paginación.
-     */
+    // Lista las publicaciones con búsqueda, filtro por año y paginación.
     private function mostrar_listado($busqueda = '', $filtro_anyo = '', $pagina_actual = 1, $items_por_pagina = 20){
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
@@ -474,8 +465,6 @@ class Publicaciones_Admin {
             echo '</div>';
         }
     }
-
-    
 
     // Elimina todas las publicaciones de la tabla
     private function vaciar_publicaciones() {
@@ -630,9 +619,11 @@ class Publicaciones_Admin {
      * conservando la extensión (.pdf / .bib).
      *
      * $original_name: nombre original del archivo (con extensión).
-     * $prefix: prefijo único (por ejemplo, uniqid().' - ').
+     * $prefix: prefijo único (por ejemplo, uniqid().'-').
+     * $maxTotal: longitud máxima PERMITIDA para el NOMBRE DEL FICHERO
+     *            (sin incluir $upload_url). Lo calcularemos fuera.
      */
-    private function build_safe_filename($original_name, $prefix = '') {
+    private function build_safe_filename($original_name, $prefix = '', $maxTotal = 255) {
         // Extensión en minúsculas (pdf, bib, etc.)
         $ext  = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
         // Nombre sin extensión
@@ -644,16 +635,14 @@ class Publicaciones_Admin {
         $base = preg_replace('/\s+/', ' ', $base);
         $base = trim($base);
 
-        // Longitud máxima total de la columna (por si se guarda en BD)
-        $maxTotal = 255;
-
         // Espacio que nos queda para la base, restando prefijo + punto + extensión
         $extra = strlen($prefix) + ($ext ? (1 + strlen($ext)) : 0);
         $maxBase = $maxTotal - $extra;
         if ($maxBase < 10) {
-            $maxBase = 10; // por si acaso
+            $maxBase = 10; // margen de seguridad
         }
 
+        // Recortar base si hace falta
         if (mb_strlen($base) > $maxBase) {
             $base = mb_substr($base, 0, $maxBase);
         }
@@ -661,8 +650,18 @@ class Publicaciones_Admin {
         return $prefix . $base . ($ext ? '.' . $ext : '');
     }
 
+    // Ejecuta el script de Python que rellena el campo 'revista' a partir de los .bib en wp_publicaciones.
+    private function ejecutar_script_bibtex() {
+        $python = "/bin/python3";
+        $script = "/home/maria/Local Sites/prueba/app/public/resources_plugins/bib_extraction.py";
 
-        // Importación masiva de publicaciones desde una ruta base con subcarpetas por año.
+        if (file_exists($script)) {
+            $cmd = $python . ' ' . escapeshellarg($script);
+            exec($cmd . " > /dev/null 2>&1 &");
+        }
+    }
+
+    // Importación masiva de publicaciones desde una ruta base con subcarpetas por año.
     public function volcar_publicaciones($ruta_origen) {
         global $wpdb;
         $table   = $wpdb->prefix . 'publicaciones';
@@ -686,6 +685,14 @@ class Publicaciones_Admin {
             $entries = scandir($carpeta_anyo);
             if ($entries === false) {
                 continue; // no se pudo leer la carpeta, siguiente año
+            }
+
+            // Longitud máxima total que admite la BD (VARCHAR(255))
+            $maxUrlLen = 255;
+            // Máxima longitud permitida para el NOMBRE DE FICHERO (sin URL)
+            $maxFilenameLen = $maxUrlLen - strlen($upload_url);
+            if ($maxFilenameLen < 50) {
+                $maxFilenameLen = 50; // por si acaso
             }
 
             foreach ($entries as $entry) {
@@ -713,7 +720,7 @@ class Publicaciones_Admin {
                 // Construir ruta al .bib asociado
                 $bib_path_origen = $carpeta_anyo . '/' . $nombre . '.bib';
 
-                // Si no hay .bib, lo ignoramos (o podrías decidir importarlo igual)
+                // Si no hay .bib, lo ignoramos
                 if (!file_exists($bib_path_origen)) {
                     continue;
                 }
@@ -732,8 +739,32 @@ class Publicaciones_Admin {
                 $uniq = uniqid('', true) . '-';
 
                 // Construir nombres seguros manteniendo la extensión .pdf / .bib
-                $pdf_dest_name = $this->build_safe_filename(basename($pdf_path_origen), $uniq);
-                $bib_dest_name = $this->build_safe_filename(basename($bib_path_origen), $uniq);
+                $pdf_dest_name = $this->build_safe_filename(basename($pdf_path_origen), $uniq, $maxFilenameLen);
+                $bib_dest_name = $this->build_safe_filename(basename($bib_path_origen), $uniq, $maxFilenameLen);
+
+                $pdf_url = $upload_url . $pdf_dest_name;
+                $bib_url = $upload_url . $bib_dest_name;
+
+                // Doble check: si por cualquier motivo se pasa de 255, recortamos un poco más la base
+                while (strlen($pdf_url) > $maxUrlLen || strlen($bib_url) > $maxUrlLen) {
+                    $cut = 5; // recortar de 5 en 5 caracteres
+                    foreach (['pdf_dest_name', 'bib_dest_name'] as $varName) {
+                        $name = $$varName;
+                        $dotPos = strrpos($name, '.');
+                        if ($dotPos === false) {
+                            // sin extensión, recortamos al final sin más
+                            $name = substr($name, 0, max(0, strlen($name) - $cut));
+                        } else {
+                            $base = substr($name, 0, $dotPos);
+                            $ext2 = substr($name, $dotPos); // incluye el punto
+                            $base = substr($base, 0, max(0, strlen($base) - $cut));
+                            $name = $base . $ext2;
+                        }
+                        $$varName = $name;
+                    }
+                    $pdf_url = $upload_url . $pdf_dest_name;
+                    $bib_url = $upload_url . $bib_dest_name;
+                }
 
                 $pdf_dest = $upload_dir . $pdf_dest_name;
                 $bib_dest = $upload_dir . $bib_dest_name;
@@ -743,24 +774,32 @@ class Publicaciones_Admin {
                 copy($bib_path_origen, $bib_dest);
 
                 // Insertar en la base de datos
-                $wpdb->insert(
+                $insert_ok = $wpdb->insert(
                     $table,
                     [
                         'titulo'           => sanitize_text_field($titulo),
                         'autores'          => sanitize_textarea_field($autores),
                         'anio'             => intval($anyo),
-                        'pdf_path'         => $upload_url . $pdf_dest_name,
-                        'bib_path'         => $upload_url . $bib_dest_name,
+                        'pdf_path'         => $pdf_url,
+                        'bib_path'         => $bib_url,
                         'revista'          => null,
                         'tipo_publicacion' => null,
                     ]
                 );
 
-                $archivos_volcados++;
+                if ( $insert_ok !== false ) {
+                    $archivos_volcados++;
+                } else {
+                    error_log("Error insertando publicación ($anyo): " . $wpdb->last_error);
+                }
             }
         }
 
         echo '<div class="notice notice-success"><p>✅ Se han volcado ' . intval($archivos_volcados) . ' publicaciones correctamente.</p></div>';
+
+        // Rellenar 'revista' desde los .bib después del volcado
+        $this->ejecutar_script_bibtex();
     }
+
 
 }
