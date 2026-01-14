@@ -60,6 +60,10 @@ El plugin incorpora un método para importar publicaciones desde una estructura 
 
 Para cada año, los ficheros PDF y BibTeX se copian a `uploads/publicaciones/{AÑO}/` y se genera la entrada correspondiente en la base de datos. Esta funcionalidad es útil para cargas iniciales o migraciones desde herramientas previas.
 
+## ¡¡Importante!!
+
+El plugin también tiene la opción de añadir, modificar o eliminar una publicación de forma manual a través de formularios que se muestran en la interfaz. Es importante que esto se haga desde ahí, nunca modificando el contenido de los directorios.
+
 ## Observaciones
 
 El plugin está enfocado al uso interno y **no expone funcionalidades en el frontal del sitio**. No obstante, la estructura del código facilita la incorporación futura de shortcodes, bloques o endpoints REST si fueran necesarios.
