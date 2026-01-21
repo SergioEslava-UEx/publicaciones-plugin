@@ -7,6 +7,9 @@ function robolab_publicaciones_shortcode() {
 
     $table = $wpdb->prefix . 'publicaciones';
 
+    $pdf_icon = PUB_PLUGIN_URL . '/resources/icons/pdf.png';
+    $bib_icon = PUB_PLUGIN_URL . '/resources/icons/tex.png';
+
     // Cargamos todas las publicaciones para filtrar en cliente (JS)
     $rows = $wpdb->get_results("
         SELECT *
@@ -140,23 +143,34 @@ function robolab_publicaciones_shortcode() {
                         <?php echo esc_html($titulo); ?>
                     </strong>
 
-                    <?php if ( ! empty($revista) ): ?>
-                        <span class="fuente-publicacion">
-                            – <?php echo esc_html($revista); ?>
+                    <?php
+                        $pdf_url = ! empty($r->pdf_path) ? esc_url($r->pdf_path) : '';
+                        $bib_url = ! empty($r->bib_path) ? esc_url($r->bib_path) : '';
+                        if ( $pdf_url || $bib_url ) :
+                    ?>
+                        <span class="pub-descargas">
+                            <?php if ( $pdf_url ) : ?>
+                                <a class="pub-icon"
+                                href="<?php echo esc_url($pdf_url); ?>"
+                                aria-label="Abrir PDF"
+                                title="PDF">
+                                    <img src="<?php echo esc_url($pdf_icon); ?>" alt='PDF'>
+                                </a>
+                            <?php endif; ?>
+
+                            <?php if ( $bib_url ) : ?>
+                                <a class="pub-icon"
+                                href="<?php echo esc_url($bib_url); ?>"
+                                aria-label="Abrir BibTeX"
+                                title="BibTeX">
+                                    <img src="<?php echo esc_url($bib_icon); ?>" alt='BibTex'>
+                                </a>
+                            <?php endif; ?>
                         </span>
+
                     <?php endif; ?>
 
-                    <?php
-                    // Aquí puedes añadir enlaces a PDF / BibTeX si los tienes:
-                    /*
-                    if ( ! empty($r->pdf_url) ) {
-                        echo " <a href='" . esc_url($r->pdf_url) . "' target='_blank' class='icono-pdf'>PDF</a>";
-                    }
-                    if ( ! empty($r->bibtex_url) ) {
-                        echo " <a href='" . esc_url($r->bibtex_url) . "' target='_blank' class='icono-bibtex'>BibTeX</a>";
-                    }
-                    */
-                    ?>
+                    
                 </li>
                 <?php
 
@@ -362,7 +376,6 @@ function robolab_publicaciones_shortcode() {
     .publicacion-item a img,
     .publicacion-item a.icono-pdf,
     .publicacion-item a.icono-bibtex {
-        margin-left: 8px;
         vertical-align: middle;
         font-size: 0.85rem;
     }
@@ -413,6 +426,34 @@ function robolab_publicaciones_shortcode() {
         max-width: 900px !important;  
         margin-left: auto !important;
         margin-right: auto !important;
+    }
+
+    
+    /* Iconos de descarga (PDF / BibTeX) junto al título */
+    .publicaciones-cientificas .pub-descargas{
+        display: inline-flex;
+        gap: .4rem;
+        margin-left: .5rem;
+        vertical-align: middle;
+        align-items: center;
+    }
+    .publicaciones-cientificas .pub-icon{
+        display: inline-flex;
+        width: 1.05rem;
+        height: 1.05rem;
+        line-height: 1;
+        color: inherit;
+        opacity: .75;
+        text-decoration: none;
+    }
+    .publicaciones-cientificas .pub-icon svg{
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+    }
+    .publicaciones-cientificas .pub-icon:hover{
+        opacity: 1;
+        text-decoration: none;
     }
 
     </style>
