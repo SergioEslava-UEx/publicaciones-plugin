@@ -64,7 +64,8 @@ class Publicaciones_Admin {
         }
 
         // Editar publicación
-        if ( isset($_GET['editar_id']) ) {
+        $hay_post_ajeno_a_edicion = !empty($_POST) && !isset($_POST['pub_editar_guardar']);
+        if ( isset($_GET['editar_id']) && !$hay_post_ajeno_a_edicion ) {
             $this->editar_publicacion_form(intval($_GET['editar_id']));
         }
 
@@ -651,50 +652,115 @@ class Publicaciones_Admin {
         global $wpdb;
         $table = $wpdb->prefix . 'publicaciones';
 
+        // Validar tipo de publicación
         $tipo_post = isset($_POST['tipo_publicacion']) ? sanitize_text_field($_POST['tipo_publicacion']) : '';
         $tipo_publicacion = in_array($tipo_post, TIPOS_PUBLICACION) ? $tipo_post : null;
+
+        // Datos básicos a actualizar
+        $nuevo_anio = intval($_POST['anio']);
 
         $data = [
             'titulo'          => sanitize_text_field($_POST['titulo']),
             'autores'         => sanitize_textarea_field($_POST['autores']),
-            'anio'            => intval($_POST['anio']),
+            'anio'            => $nuevo_anio,
             'tipo_publicacion'=> $tipo_publicacion,
             'revista'         => isset($_POST['revista']) ? sanitize_text_field($_POST['revista']) : null
         ];
 
+        // Datos actuales de la publicación
         $pub = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id=%d", $id));
+        if ( !$pub ) {
+            echo '<div class="notice notice-error"><p>❌ Publicación no encontrada.</p></div>';
+            return;
+        }
+
+        $anio_antiguo = intval($pub->anio);
+
         $uploads = wp_upload_dir();
-        $year = !empty($_POST['anio']) ? intval($_POST['anio']) : date('Y');
-        $upload_dir = $uploads['basedir'] . '/publicaciones/' . $year . '/';
-        $upload_url = $uploads['baseurl'] . '/publicaciones/' . $year . '/';
+        $upload_dir_nuevo = $uploads['basedir'] . '/publicaciones/' . $nuevo_anio . '/';
+        $upload_url_nuevo = $uploads['baseurl'] . '/publicaciones/' . $nuevo_anio . '/';
 
-        if ( ! file_exists( $upload_dir ) ) wp_mkdir_p( $upload_dir );
+        if ( ! file_exists( $upload_dir_nuevo ) ) {
+            wp_mkdir_p( $upload_dir_nuevo );
+        }
 
-        // Reemplazar PDF si se sube
+        // Flags para saber si hemos subido ficheros nuevos
+        $subido_pdf = false;
+        $subido_bib = false;
+
+        // --- Reemplazar PDF si se sube uno nuevo ---
         if ( isset($_FILES['pdf']) && $_FILES['pdf']['error'] === UPLOAD_ERR_OK ) {
+            // Borrar antiguo si existe
             if ( $pub->pdf_path && file_exists(ABSPATH . str_replace(site_url().'/', '', $pub->pdf_path)) ) {
                 unlink(ABSPATH . str_replace(site_url().'/', '', $pub->pdf_path));
             }
-            $pdf_name = uniqid('', true) . '-' . basename($_FILES['pdf']['name']);
-            $pdf_dest = $upload_dir . $pdf_name;
-            move_uploaded_file($_FILES['pdf']['tmp_name'], $pdf_dest);
-            $data['pdf_path'] = $upload_url . $pdf_name;
+            $pdf_name = uniqid('', false) . '-' . basename($_FILES['pdf']['name']);
+            $pdf_dest = $upload_dir_nuevo . $pdf_name;
+            if ( move_uploaded_file($_FILES['pdf']['tmp_name'], $pdf_dest) ) {
+                $data['pdf_path'] = $upload_url_nuevo . $pdf_name;
+                $subido_pdf = true;
+            }
         }
 
-        // Reemplazar BibTeX si se sube
+        // --- Reemplazar BibTeX si se sube uno nuevo ---
         if ( isset($_FILES['bib']) && $_FILES['bib']['error'] === UPLOAD_ERR_OK ) {
+            // Borrar antiguo si existe
             if ( $pub->bib_path && file_exists(ABSPATH . str_replace(site_url().'/', '', $pub->bib_path)) ) {
                 unlink(ABSPATH . str_replace(site_url().'/', '', $pub->bib_path));
             }
-            $bib_name = uniqid('', true) . '-' . basename($_FILES['bib']['name']);
-            $bib_dest = $upload_dir . $bib_name;
-            move_uploaded_file($_FILES['bib']['tmp_name'], $bib_dest);
-            $data['bib_path'] = $upload_url . $bib_name;
+            $bib_name = uniqid('', false) . '-' . basename($_FILES['bib']['name']);
+            $bib_dest = $upload_dir_nuevo . $bib_name;
+            if ( move_uploaded_file($_FILES['bib']['tmp_name'], $bib_dest) ) {
+                $data['bib_path'] = $upload_url_nuevo . $bib_name;
+                $subido_bib = true;
+            }
+        }
+
+        // Si NO se han subido ficheros nuevos, pero el año ha cambiado, movemos los archivos existentes a la carpeta del año nuevo 
+        if ( $anio_antiguo !== $nuevo_anio ) {
+
+            // Mover PDF existente
+            if ( !$subido_pdf && !empty($pub->pdf_path) ) {
+                $ruta_rel_pdf = str_replace(site_url().'/', '', $pub->pdf_path);
+                $pdf_antiguo_abs = ABSPATH . $ruta_rel_pdf;
+
+                if ( file_exists($pdf_antiguo_abs) ) {
+                    $nombre_pdf = basename($pdf_antiguo_abs);
+                    $pdf_nuevo_abs = $upload_dir_nuevo . $nombre_pdf;
+
+                    // Crear dir por si acaso
+                    if ( !file_exists($upload_dir_nuevo) ) {
+                        wp_mkdir_p($upload_dir_nuevo);
+                    }
+
+                    if ( rename($pdf_antiguo_abs, $pdf_nuevo_abs) ) {
+                        $data['pdf_path'] = $upload_url_nuevo . $nombre_pdf;
+                    }
+                }
+            }
+
+            // Mover BibTeX existente
+            if ( !$subido_bib && !empty($pub->bib_path) ) {
+                $ruta_rel_bib = str_replace(site_url().'/', '', $pub->bib_path);
+                $bib_antiguo_abs = ABSPATH . $ruta_rel_bib;
+
+                if ( file_exists($bib_antiguo_abs) ) {
+                    $nombre_bib = basename($bib_antiguo_abs);
+                    $bib_nuevo_abs = $upload_dir_nuevo . $nombre_bib;
+
+                    if ( !file_exists($upload_dir_nuevo) ) {
+                        wp_mkdir_p($upload_dir_nuevo);
+                    }
+
+                    if ( rename($bib_antiguo_abs, $bib_nuevo_abs) ) {
+                        $data['bib_path'] = $upload_url_nuevo . $nombre_bib;
+                    }
+                }
+            }
         }
 
         $wpdb->update($table, $data, ['id' => $id]);
-        
-        // Marcamos que la edición fue correcta
+
         $this->edit_success = true;
 
         echo '<div class="notice notice-success"><p>✅ Publicación actualizada correctamente.</p></div>';
@@ -822,11 +888,13 @@ class Publicaciones_Admin {
                 }
 
                 // Prefijo único compartido por PDF y BIB
-                $uniq = uniqid('', true) . '-';
+                $uniq = uniqid('', false) . '-';
+
+                $nombre_para_archivo = $autores ? ($autores . '-' . $titulo) : $titulo;
 
                 // Construir nombres seguros manteniendo la extensión .pdf / .bib
-                $pdf_dest_name = $this->build_safe_filename(basename($pdf_path_origen), $uniq, $maxFilenameLen);
-                $bib_dest_name = $this->build_safe_filename(basename($bib_path_origen), $uniq, $maxFilenameLen);
+                $pdf_dest_name = $this->build_safe_filename($nombre_para_archivo . '.pdf', $uniq, $maxFilenameLen);
+                $bib_dest_name = $this->build_safe_filename($nombre_para_archivo . '.bib', $uniq, $maxFilenameLen);
 
                 $pdf_url = $upload_url . $pdf_dest_name;
                 $bib_url = $upload_url . $bib_dest_name;
